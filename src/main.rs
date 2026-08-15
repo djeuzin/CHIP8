@@ -3,9 +3,18 @@ use std::process::Command;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
+extern crate sdl2;
+
+use sdl2::pixels::Color;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::rect::Rect;
+
 const INTERVAL: Duration = Duration::from_millis(16);
 const MEMORY_SIZE: usize = 4 * 1024;
 const NIBBLE_MASK: u8 = 0b0000_1111;
+const RECT_WIDTH: u32 = 10;
+const RECT_HEIGHT: u32 = 10;
 
 const FONTS: [u8; 80] = [
             0xF0, 0x90, 0x90, 0x90, 0xF0, 
@@ -77,7 +86,7 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
 
     match n1 {
         0x0 => {
-            clear_screen();
+            *display = [[false; 64]; 32];
         },
         0x1 => {
             cpu.pc = (u16::from(n1) << 8) + u16::from(b2);
@@ -112,7 +121,7 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
                             cpu.registers[0xF] = 1;
                         }
 
-                        display[x][y] = !display[x][y];
+                        display[x][y] ^= display[x][y];
                     }
 
                     if x + 1 > 63 { break; }
@@ -124,8 +133,6 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
 
                 y = y + 1;
             }
-
-            draw(&display);
         },
         other => {
             println!("Invalid instruction {other}. Exiting");
@@ -180,7 +187,15 @@ fn clear_screen() {
     let name = output.stdout;
 }
 
-fn main() {
+fn set_rect_coords(r: &mut Rect, x: i32, y: i32) {
+    let x_offset = 0;
+    let y_offset = 60;
+
+    r.x = x_offset + x * 10; 
+    r.y = y_offset + y * 10;
+}
+
+pub fn main() {
     let mut ram: [u8; MEMORY_SIZE] = [0; MEMORY_SIZE];
     let mut cpu = Cpu::init();
     let mut display: [[bool; 64]; 32] = [[false; 64]; 32];
@@ -192,21 +207,40 @@ fn main() {
         return;
     }
 
-    //for i in 0x200..MEMORY_SIZE {
-    //    let a = ram[usize::from(i)];
-
-    //    let n2 = get_second_nible(a);
-    //    let n1 = a >> 4;
-
-    //    println!("{} - N1: {n1:#x}, N2: {n2:#x})", (i-0x200));
-    //}
-
-    //return;
-
     let mut next_time = Instant::now() + INTERVAL;
-    draw(&display);
 
-    loop {
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+
+    let window = video_subsystem.window("rust-sdl2 demo", 640, 380)
+        .position_centered()
+        .build()
+        .unwrap();
+
+    let mut canvas = window.into_canvas().build().unwrap();
+    let mut rect = Rect::new(0, 0, RECT_WIDTH, RECT_HEIGHT);
+
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    canvas.present();
+    let mut event_pump = sdl_context.event_pump().unwrap();
+
+    'running: loop {
+        canvas.set_draw_color(Color::RGB(0,0,0));
+        canvas.clear();
+        canvas.set_draw_color(Color::RGB(255,255,255));
+        for i in 0..32 {
+            for j in 0..64 {
+                let x: i32 = j as i32;
+                let y: i32 = i as i32;
+
+                if display[i][j] {
+                    set_rect_coords(&mut rect, x, y);
+                    canvas.fill_rect(rect);
+                }
+            }
+        }
+        
         let bytes = match fetch(&ram, &mut cpu.pc) {
             Some(bytes) => bytes,
             None => {
@@ -219,18 +253,24 @@ fn main() {
 
         if !success { break; }
 
-        //println!("PC: {:#x}", cpu.pc);
-        //println!("I register: {:#x}", cpu.register_i);
-        //let i: usize = 0;
-        //while i < 16 {
-        //    print!("V{:#x}: {:#x} ", i, cpu.registers[i]);
-        //}
-        //println!("");
-
         cpu.sound_timer = cpu.sound_timer.wrapping_sub(1);
         cpu.delay_timer = cpu.delay_timer.wrapping_sub(1);
 
         sleep(next_time - Instant::now());
         next_time += INTERVAL;
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                _ => {}
+            }
+        }
+        // The rest of the game loop goes here...
+
+        canvas.present();
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }

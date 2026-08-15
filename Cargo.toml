@@ -6,4 +6,6 @@ edition = "2024"
 [dependencies]
 crossterm = "0.29.0"
 rand = "0.8.5"
-ratatui = "0.30.2"
+
+[dependencies.sdl2] 
+git = "https://github.com/AngryLawyer/rust-sdl2"

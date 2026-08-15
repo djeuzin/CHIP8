@@ -1,5 +1,9 @@
 use std::fs;
+use std::process::Command;
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
+const INTERVAL: Duration = Duration::from_millis(16);
 const MEMORY_SIZE: usize = 4 * 1024;
 const NIBBLE_MASK: u8 = 0b0000_1111;
 
@@ -36,7 +40,7 @@ struct Cpu {
 impl Cpu {
     fn init() -> Self {
         Self {
-            pc: 200,
+            pc: 0x200,
             register_i: 0,
             stack: [0; 16],
             delay_timer: 255,
@@ -63,7 +67,7 @@ fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     Some(Bytes(b1, b2))
 }
 
-fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32], bytes: Bytes) {
+fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32], bytes: Bytes) -> bool {
     let Bytes(b1, b2) = bytes;
 
     let n1 = b1 >> 4;
@@ -73,7 +77,7 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
 
     match n1 {
         0x0 => {
-            //Clear screen
+            clear_screen();
         },
         0x1 => {
             cpu.pc = (u16::from(n1) << 8) + u16::from(b2);
@@ -96,18 +100,19 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
             
             cpu.registers[0xF] = 0;
 
-            for _i in 0..n4 {
-                let sprite = cpu.registers[usize::from(cpu.register_i) + usize::from(n4)];
+            for i in 0..n4 {
+                let sprite = ram[usize::from(cpu.register_i) + usize::from(n4)];
+                x = usize::from(cpu.registers[usize::from(n2)] % 64);
 
-                for j in (1..8).rev() {
+                for j in (0..8).rev() {
                     let bit = (sprite << j) % 2;
 
-                    if bit == 1 && display[x][y] {
-                        display[x][y] = false;
-                        cpu.registers[0xF] = 0;
-                    }
-                    else if bit == 1 && !display[x][y] {
-                        display[x][y] = true;
+                    if bit == 1 {
+                        if display[x][y] {
+                            cpu.registers[0xF] = 1;
+                        }
+
+                        display[x][y] = !display[x][y];
                     }
 
                     if x + 1 > 63 { break; }
@@ -120,12 +125,15 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
                 y = y + 1;
             }
 
+            draw(&display);
         },
-        _ => {
-            println!("Invalid instruction. Exiting");
-            return;
+        other => {
+            println!("Invalid instruction {other}. Exiting");
+            return false;
         }
     }
+
+    return true;
 }
 
 fn load_rom(file_path: &str, ram: &mut [u8]) -> usize {
@@ -134,7 +142,7 @@ fn load_rom(file_path: &str, ram: &mut [u8]) -> usize {
         Err(_) => return 0
     };
 
-    let mut index: usize = 200;
+    let mut index: usize = 0x200;
 
     for byte in &file_bytes {
         ram[index] = *byte;
@@ -155,17 +163,21 @@ fn draw(display: &[[bool; 64]; 32]) {
     for line in display {
         for item in line {
             if *item {
-                print!("[x]");
+                print!("XXXXXX");
             }
             else {
-                print!("[ ]");
+                print!("O");
             }
         }
     }
 }
 
 fn clear_screen() {
-    println!("\r\x1b[2J\r\x1b[H")
+    let output = Command::new("clear")
+        .spawn()
+        .expect("Failed to run command");
+
+    let name = output.stdout;
 }
 
 fn main() {
@@ -180,16 +192,19 @@ fn main() {
         return;
     }
 
-    let mut i = 0;
+    //for i in 0x200..MEMORY_SIZE {
+    //    let a = ram[usize::from(i)];
 
-    while i < 10 {
-        clear_screen();
-        draw(&display);
-        
-        i += 1;
-    }
+    //    let n2 = get_second_nible(a);
+    //    let n1 = a >> 4;
 
-    return;
+    //    println!("{} - N1: {n1:#x}, N2: {n2:#x})", (i-0x200));
+    //}
+
+    //return;
+
+    let mut next_time = Instant::now() + INTERVAL;
+    draw(&display);
 
     loop {
         let bytes = match fetch(&ram, &mut cpu.pc) {
@@ -200,10 +215,22 @@ fn main() {
             }
         };
 
-        decode_execute(&mut cpu, &mut ram, &mut display, bytes);
+        let success = decode_execute(&mut cpu, &mut ram, &mut display, bytes);
 
-        clear_screen();
+        if !success { break; }
 
-        draw(&display);
+        //println!("PC: {:#x}", cpu.pc);
+        //println!("I register: {:#x}", cpu.register_i);
+        //let i: usize = 0;
+        //while i < 16 {
+        //    print!("V{:#x}: {:#x} ", i, cpu.registers[i]);
+        //}
+        //println!("");
+
+        cpu.sound_timer = cpu.sound_timer.wrapping_sub(1);
+        cpu.delay_timer = cpu.delay_timer.wrapping_sub(1);
+
+        sleep(next_time - Instant::now());
+        next_time += INTERVAL;
     }
 }

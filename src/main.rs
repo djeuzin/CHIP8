@@ -100,28 +100,33 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
             cpu.registers[x] += b2;
         },
         0xA => {
-            cpu.register_i = (u16::from(n1) << 8) + u16::from(b2);
+            cpu.register_i = (u16::from(n2) << 8) + u16::from(b2);
         },
         0xD => {
             // DXYN draw
+            // 1001_1111 >> 7
+            // 
+
+            // D - n1, X - n2, Y - n3, N - n4
             let mut x = usize::from(cpu.registers[usize::from(n2)] % 64);
             let mut y = usize::from(cpu.registers[usize::from(n3)] % 32);
             
             cpu.registers[0xF] = 0;
 
             for i in 0..n4 {
-                let sprite = ram[usize::from(cpu.register_i) + usize::from(n4)];
+                let sprite = ram[usize::from(cpu.register_i) + usize::from(i)];
                 x = usize::from(cpu.registers[usize::from(n2)] % 64);
 
                 for j in (0..8).rev() {
-                    let bit = (sprite << j) % 2;
+                    let bit = (sprite >> j) % 2;
 
                     if bit == 1 {
-                        if display[x][y] {
+                        if display[y][x] {
                             cpu.registers[0xF] = 1;
+                            display[y][x] = false;
                         }
 
-                        display[x][y] ^= display[x][y];
+                        display[y][x] = true;
                     }
 
                     if x + 1 > 63 { break; }
@@ -179,14 +184,6 @@ fn draw(display: &[[bool; 64]; 32]) {
     }
 }
 
-fn clear_screen() {
-    let output = Command::new("clear")
-        .spawn()
-        .expect("Failed to run command");
-
-    let name = output.stdout;
-}
-
 fn set_rect_coords(r: &mut Rect, x: i32, y: i32) {
     let x_offset = 0;
     let y_offset = 60;
@@ -224,8 +221,61 @@ pub fn main() {
     canvas.clear();
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut flag_continue = false;
+
+    println!("Program counter: {:#x}", cpu.pc);
+        for (i, reg) in cpu.registers.iter().enumerate() {
+            print!("V{i}: {:#x} ", reg);
+        }
+        println!("Register I: {:#x}", cpu.register_i);
+        println!("Current bytes: {:#x}-{:#x}", ram[usize::from(cpu.pc)], ram[usize::from(cpu.pc) + 1]);
 
     'running: loop {
+        flag_continue = true;
+
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit {..} |
+                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                    break 'running
+                },
+                Event::KeyDown { keycode: Some(Keycode::Return), .. } => {
+                    flag_continue = true;
+                },
+                _ => {}
+            }
+        }
+
+        if flag_continue == false {
+            continue;
+        }
+        // The rest of the game loop goes here...
+        
+        let bytes = match fetch(&ram, &mut cpu.pc) {
+            Some(bytes) => bytes,
+            None => {
+                println!("Coundn't fech bytes. Exiting.");
+                break;
+            }
+        };
+
+        let success = decode_execute(&mut cpu, &mut ram, &mut display, bytes);
+
+        if !success { break; }
+
+        println!("\nProgram counter: {:#x}", cpu.pc);
+        for (i, reg) in cpu.registers.iter().enumerate() {
+            print!("V{i}: {:#x} ", reg);
+        }
+        println!("Register I: {:#x}", cpu.register_i);
+        println!("Current bytes: {:#x}-{:#x}", ram[usize::from(cpu.pc)], ram[usize::from(cpu.pc) + 1]);
+
+        cpu.sound_timer = cpu.sound_timer.wrapping_sub(1);
+        cpu.delay_timer = cpu.delay_timer.wrapping_sub(1);
+
+        sleep(next_time - Instant::now());
+        next_time += INTERVAL;
+
         canvas.set_draw_color(Color::RGB(0,0,0));
         canvas.clear();
         canvas.set_draw_color(Color::RGB(255,255,255));
@@ -240,35 +290,6 @@ pub fn main() {
                 }
             }
         }
-        
-        let bytes = match fetch(&ram, &mut cpu.pc) {
-            Some(bytes) => bytes,
-            None => {
-                println!("Coundn't fech bytes. Exiting.");
-                break;
-            }
-        };
-
-        let success = decode_execute(&mut cpu, &mut ram, &mut display, bytes);
-
-        if !success { break; }
-
-        cpu.sound_timer = cpu.sound_timer.wrapping_sub(1);
-        cpu.delay_timer = cpu.delay_timer.wrapping_sub(1);
-
-        sleep(next_time - Instant::now());
-        next_time += INTERVAL;
-
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running
-                },
-                _ => {}
-            }
-        }
-        // The rest of the game loop goes here...
 
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

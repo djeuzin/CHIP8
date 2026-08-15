@@ -63,7 +63,7 @@ fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     Some(Bytes(b1, b2))
 }
 
-fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], bytes: Bytes) {
+fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32], bytes: Bytes) {
     let Bytes(b1, b2) = bytes;
 
     let n1 = b1 >> 4;
@@ -91,9 +91,35 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], bytes: Bytes) {
         },
         0xD => {
             // DXYN draw
-            let x = cpu.registers[usize::from(n2)] % 64;
-            let y = cpu.registers[usize::from(n3)] % 32;
+            let mut x = usize::from(cpu.registers[usize::from(n2)] % 64);
+            let mut y = usize::from(cpu.registers[usize::from(n3)] % 32);
+            
             cpu.registers[0xF] = 0;
+
+            for _i in 0..n4 {
+                let sprite = cpu.registers[usize::from(cpu.register_i) + usize::from(n4)];
+
+                for j in (1..8).rev() {
+                    let bit = (sprite << j) % 2;
+
+                    if bit == 1 && display[x][y] {
+                        display[x][y] = false;
+                        cpu.registers[0xF] = 0;
+                    }
+                    else if bit == 1 && !display[x][y] {
+                        display[x][y] = true;
+                    }
+
+                    if x + 1 > 63 { break; }
+
+                    x = x + 1;
+                }
+
+                if y + 1 > 31 { break; }
+
+                y = y + 1;
+            }
+
         },
         _ => {
             println!("Invalid instruction. Exiting");
@@ -174,6 +200,10 @@ fn main() {
             }
         };
 
-        decode_execute(&mut cpu, &mut ram, bytes);
+        decode_execute(&mut cpu, &mut ram, &mut display, bytes);
+
+        clear_screen();
+
+        draw(&display);
     }
 }

@@ -12,8 +12,13 @@ use std::path::Path;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
+    // Path to rom to load
     #[arg(short, long, default_value = "roms/ibm.ch8")]
     path: String,
+
+    // Instructions per second
+    #[arg(short, long, default_value_t = 60)]
+    ips: u64,
 }
 
 pub fn main() {
@@ -26,5 +31,5 @@ pub fn main() {
 
     let mut ctx = CH8Context::init(&args.path);
 
-    run(&mut ctx);
+    run(&mut ctx, args.ips);
 }

@@ -119,8 +119,9 @@ pub fn decode_execute(ctx: &mut CH8Context) -> bool {
     return true;
 }
 
-pub fn run(mut ctx: &mut CH8Context) {
-    let mut next_time = Instant::now() + INTERVAL;
+pub fn run(mut ctx: &mut CH8Context, ips: u64) {
+    let interval: Duration = Duration::from_millis(1000 / ips);
+    let mut next_time = Instant::now() + interval;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -180,7 +181,7 @@ pub fn run(mut ctx: &mut CH8Context) {
         }
 
         sleep(next_time - Instant::now());
-        next_time += INTERVAL;
+        next_time += interval;
 
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

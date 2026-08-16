@@ -1,8 +1,4 @@
-use std::time::Duration;
-
 pub const MEMORY_SIZE: usize = 4 * 1024;
-
-pub const INTERVAL: Duration = Duration::from_millis(16);
 
 pub const NIBBLE_MASK: u8 = 0b0000_1111;
 

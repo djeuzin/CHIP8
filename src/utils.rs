@@ -35,7 +35,7 @@ pub fn load_rom(file_path: &str) -> Option<[u8; MEMORY_SIZE]> {
 
 pub fn set_rect_coords(r: &mut Rect, x: i32, y: i32) {
     let x_offset = 0;
-    let y_offset = 60;
+    let y_offset = 0;
 
     r.x = x_offset + x * 10; 
     r.y = y_offset + y * 10;

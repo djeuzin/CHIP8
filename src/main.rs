@@ -86,7 +86,12 @@ fn decode_execute(cpu: &mut Cpu, ram: &mut [u8], display: &mut [[bool; 64]; 32],
 
     match n1 {
         0x0 => {
-            *display = [[false; 64]; 32];
+            if n2 == 0 && n3 == 0xE {
+                *display = [[false; 64]; 32];
+            }
+            else if n3 == 0 {
+                cpu.pc -= 2;
+            }
         },
         0x1 => {
             cpu.pc = (u16::from(n1) << 8) + u16::from(b2);
@@ -223,12 +228,12 @@ pub fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut flag_continue = false;
 
-    println!("Program counter: {:#x}", cpu.pc);
-        for (i, reg) in cpu.registers.iter().enumerate() {
-            print!("V{i}: {:#x} ", reg);
-        }
-        println!("Register I: {:#x}", cpu.register_i);
-        println!("Current bytes: {:#x}-{:#x}", ram[usize::from(cpu.pc)], ram[usize::from(cpu.pc) + 1]);
+    // println!("Program counter: {:#x}", cpu.pc);
+    // for (i, reg) in cpu.registers.iter().enumerate() {
+    //     print!("V{i}: {:#x} ", reg);
+    // }
+    // println!("Register I: {:#x}", cpu.register_i);
+    // println!("Current bytes: {:#x}-{:#x}", ram[usize::from(cpu.pc)], ram[usize::from(cpu.pc) + 1]);
 
     'running: loop {
         flag_continue = true;
@@ -273,9 +278,6 @@ pub fn main() {
         cpu.sound_timer = cpu.sound_timer.wrapping_sub(1);
         cpu.delay_timer = cpu.delay_timer.wrapping_sub(1);
 
-        sleep(next_time - Instant::now());
-        next_time += INTERVAL;
-
         canvas.set_draw_color(Color::RGB(0,0,0));
         canvas.clear();
         canvas.set_draw_color(Color::RGB(255,255,255));
@@ -290,6 +292,9 @@ pub fn main() {
                 }
             }
         }
+
+        sleep(next_time - Instant::now());
+        next_time += INTERVAL;
 
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));

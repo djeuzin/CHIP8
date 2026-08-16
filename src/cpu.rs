@@ -16,6 +16,7 @@ pub struct Cpu {
     pc: u16,
     register_i: u16,
     stack: [u16; 16],
+    stack_index: u8,
     delay_timer: u8,
     sound_timer: u8,
     registers: [u8; 16]
@@ -27,6 +28,7 @@ impl Cpu {
             pc: 0x200,
             register_i: 0,
             stack: [0; 16],
+            stack_index: 0,
             delay_timer: 255,
             sound_timer: 255,
             registers: [0; 16]

@@ -8,6 +8,8 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::rect::Rect;
 
+use rand::Rng;
+
 use crate::constants::*;
 use crate::context::CH8Context;
 use crate::utils::{Bytes, get_second_nible, set_rect_coords};
@@ -16,7 +18,7 @@ pub struct Cpu {
     pc: u16,
     register_i: u16,
     stack: [u16; 16],
-    stack_index: u8,
+    stack_index: usize,
     delay_timer: u8,
     sound_timer: u8,
     registers: [u8; 16]
@@ -36,6 +38,75 @@ impl Cpu {
     }
 }
 
+fn logical_and_arithmetic_instructions(ctx: &mut CH8Context, n2: u8, n3: u8, n4: u8, super_chip: bool) {
+    let x = usize::from(n2);
+    let y = usize::from(n3);
+    
+    match n4 {
+        0x0 => {
+            ctx.cpu.registers[x] = ctx.cpu.registers[y];
+        },
+        0x1 => {
+            ctx.cpu.registers[x] |= ctx.cpu.registers[y];
+        },
+        0x2 => {
+            ctx.cpu.registers[x] &= ctx.cpu.registers[y];
+        },
+        0x3 => {
+            ctx.cpu.registers[x] ^= ctx.cpu.registers[y];
+        },
+        0x4 => {
+            let (count, overflow) = ctx.cpu.registers[x].overflowing_add(ctx.cpu.registers[y]);
+            ctx.cpu.registers[x] = count;
+
+            if overflow {
+                ctx.cpu.registers[0xF] = 1;
+            }
+        },
+        0x5 => {
+            ctx.cpu.registers[x] -= ctx.cpu.registers[y];
+
+            if ctx.cpu.registers[x] >= ctx.cpu.registers[y] {
+                ctx.cpu.registers[0xF] = 1;
+            } 
+            else {
+                ctx.cpu.registers[0xF] = 0;
+            }
+        },
+        0x6 => {
+            if !super_chip {
+                ctx.cpu.registers[x] = ctx.cpu.registers[y];
+            }
+
+            ctx.cpu.registers[0xF] = ctx.cpu.registers[x] % 2;
+
+            ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
+        },
+        0x7 => {
+            ctx.cpu.registers[y] -= ctx.cpu.registers[x];
+
+            if ctx.cpu.registers[y] >= ctx.cpu.registers[x] {
+                ctx.cpu.registers[0xF] = 1;
+            } 
+            else {
+                ctx.cpu.registers[0xF] = 0;
+            }
+        },
+        0xE => {
+            if !super_chip {
+                ctx.cpu.registers[x] = ctx.cpu.registers[y];
+            }
+
+            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] << 7) % 2;
+
+            ctx.cpu.registers[x] = ctx.cpu.registers[x] << 1;
+        },
+        _ => {
+            println!("Invalid instruction.");
+        }
+    }
+}
+
 pub fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     let i = usize::from(*pc);
     if i + 1 >= MEMORY_SIZE {
@@ -49,7 +120,7 @@ pub fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     Some(Bytes(b1, b2))
 }
 
-pub fn decode_execute(ctx: &mut CH8Context) -> bool {
+pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
     let Bytes(b1, b2) = ctx.bytes;
 
     let n1 = b1 >> 4;
@@ -59,15 +130,41 @@ pub fn decode_execute(ctx: &mut CH8Context) -> bool {
 
     match n1 {
         0x0 => {
-            if n2 == 0 && n3 == 0xE {
-                ctx.display = [[false; 64]; 32];
+            if n2 == 0x0 && n3 == 0xE {
+                if n4 == 0x0 { 
+                    ctx.display = [[false; 64]; 32];
+                }
+                else {
+                    ctx.cpu.stack_index -= 1;
+                    ctx.cpu.pc = ctx.cpu.stack[ctx.cpu.stack_index];
+                }
             }
-            else if n3 == 0 {
+            else if n3 == 0x0 {
                 ctx.cpu.pc -= 2;
             }
         },
         0x1 => {
-            ctx.cpu.pc = (u16::from(n1) << 8) + u16::from(b2);
+            ctx.cpu.pc = (u16::from(n1) << 8) | u16::from(b2);
+        },
+        0x2 => {
+            ctx.cpu.stack[ctx.cpu.stack_index] = ctx.cpu.pc;
+            ctx.cpu.stack_index += 1;
+            ctx.cpu.pc = (u16::from(n1) << 8) | u16::from(b2);
+        },
+        0x3 => {
+            if ctx.cpu.registers[usize::from(n2)] == b2 {
+                ctx.cpu.pc += 2;
+            }
+        },
+        0x4 => {
+            if ctx.cpu.registers[usize::from(n2)] != b2 {
+                ctx.cpu.pc += 2;
+            }            
+        },
+        0x5 => {
+            if ctx.cpu.registers[usize::from(n2)] == ctx.cpu.registers[usize::from(n3)] {
+                ctx.cpu.pc += 2;
+            }
         },
         0x6 => {
             let x = usize::from(n2);
@@ -77,8 +174,25 @@ pub fn decode_execute(ctx: &mut CH8Context) -> bool {
             let x = usize::from(n2);
             ctx.cpu.registers[x] += b2;
         },
+        0x8 => {
+            logical_and_arithmetic_instructions(&mut ctx, n2, n3, n4, false);
+        },
+        0x9 => {
+            if ctx.cpu.registers[usize::from(n2)] != ctx.cpu.registers[usize::from(n3)] {
+                ctx.cpu.pc += 2;
+            }
+        },
         0xA => {
-            ctx.cpu.register_i = (u16::from(n2) << 8) + u16::from(b2);
+            ctx.cpu.register_i = (u16::from(n2) << 8) | u16::from(b2);
+        },
+        0xB => {
+            ctx.cpu.pc = (u16::from(n2) << 8) | u16::from(b2) + u16::from(ctx.cpu.registers[0x0]);
+        },
+        0xC => {
+            let mut rng = rand::thread_rng();
+            let n: u8 = rng.gen_range(0..b2);
+
+            ctx.cpu.registers[usize::from(n2)] = n & b2;
         },
         0xD => {
             // DXYN draw

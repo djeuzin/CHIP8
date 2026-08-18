@@ -76,7 +76,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             ctx.cpu.pc -= 2;
         },
         (0x1, _, _, _) => {
-            let u16_n1 = n1 as u16;
+            let u16_n1 = n2 as u16;
             let u16_b2 = b2 as u16;
 
             ctx.cpu.pc = (u16_n1 << 8) | u16_b2;
@@ -100,7 +100,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 ctx.cpu.pc += 2;
             }            
         },
-        (0x5, _, _, _) => {
+        (0x5, _, _, 0x0) => {
             if ctx.cpu.registers[x] == ctx.cpu.registers[y] {
                 ctx.cpu.pc += 2;
             }
@@ -109,7 +109,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             ctx.cpu.registers[x] = b2;
         },
         (0x7, _, _, _) => {
-            ctx.cpu.registers[x] += b2;
+            ctx.cpu.registers[x] = ctx.cpu.registers[x].wrapping_add(b2);
         },
         (0x8, _, _, 0x0) => {
             ctx.cpu.registers[x] = ctx.cpu.registers[y];
@@ -132,17 +132,17 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             }
         },
         (0x8, _, _, 0x5) => {
-            ctx.cpu.registers[x] -= ctx.cpu.registers[y];
-
             if ctx.cpu.registers[x] >= ctx.cpu.registers[y] {
                 ctx.cpu.registers[0xF] = 1;
             } 
             else {
                 ctx.cpu.registers[0xF] = 0;
             }
+
+            ctx.cpu.registers[x] = ctx.cpu.registers[x].wrapping_sub(ctx.cpu.registers[y]);
         },
         (0x8, _, _, 0x6) => {
-            if !super_chip {
+            if super_chip {
                 ctx.cpu.registers[x] = ctx.cpu.registers[y];
             }
 
@@ -151,25 +151,24 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
         },
         (0x8, _, _, 0x7) => {
-            ctx.cpu.registers[y] -= ctx.cpu.registers[x];
-
             if ctx.cpu.registers[y] >= ctx.cpu.registers[x] {
                 ctx.cpu.registers[0xF] = 1;
             } 
             else {
                 ctx.cpu.registers[0xF] = 0;
             }
+
+            ctx.cpu.registers[y] = ctx.cpu.registers[y].wrapping_sub(ctx.cpu.registers[x]);
         },
         (0x8, _, _, 0xE) => {
-            if !super_chip {
+            if super_chip {
                 ctx.cpu.registers[x] = ctx.cpu.registers[y];
             }
 
-            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] << 7) % 2;
-
+            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] >> 7) & 1;
             ctx.cpu.registers[x] = ctx.cpu.registers[x] << 1;
         },
-        (0x9, _, _, _) => {
+        (0x9, _, _, 0x0) => {
             if ctx.cpu.registers[x] != ctx.cpu.registers[y] {
                 ctx.cpu.pc += 2;
             }
@@ -224,18 +223,18 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 y = y + 1;
             }
         },
-        (0xE, _, _, _) => {
+        (0xE, _, 0x9, 0xE) => {
+            let index = ctx.cpu.registers[x] as usize;
+            
+            if ctx.cpu.keyboard[index] {
+                ctx.cpu.pc += 2;
+            }
+        },
+        (0xE, _, 0xA, 0x1) => {
             let index = ctx.cpu.registers[x] as usize;
 
-            if n3 == 0x9 {
-                if ctx.cpu.keyboard[index] {
-                    ctx.cpu.pc += 2;
-                }
-            }
-            else {
-                if !ctx.cpu.keyboard[index] {
-                    ctx.cpu.pc += 2;
-                }
+            if !ctx.cpu.keyboard[index] {
+                ctx.cpu.pc += 2;
             }
         },
         (0xF, _, 0x0, 0x7) => {
@@ -323,24 +322,47 @@ pub fn run(mut ctx: &mut CH8Context, ips: u64) {
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
 
+    let mut debug: bool;
+
+    println!("Current instructions: {:#x}-{:#x}", ctx.ram[usize::from(ctx.cpu.pc)], ctx.ram[usize::from(ctx.cpu.pc) + 1]);
+    for i in 0..16 {
+        print!("V{i}={:#x}, ", ctx.cpu.registers[i]);
+    }
+    println!("I:{:#x}", ctx.cpu.register_i);
+
     'running: loop {
+        debug = false;
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
+                Event::KeyDown { keycode: Some(Keycode::RETURN), .. } => {
+                    debug = false;
+                }
                 _ => {}
             }
         }
 
-        for (i, code) in KEYBOARD_MAP.iter().enumerate() {
-            if event_pump.keyboard_state().is_scancode_pressed(*code) {
-                ctx.cpu.keyboard[i] = true;
-                println!("Key: {i} pressed");
+        if debug { continue; }
+
+        if false {
+            println!("Current instructions: PC={:#x}; {:#x}-{:#x}", ctx.cpu.pc, ctx.ram[usize::from(ctx.cpu.pc)], ctx.ram[usize::from(ctx.cpu.pc) + 1]);
+            for i in 0..16 {
+                print!("V{i}={:#x}, ", ctx.cpu.registers[i]);
             }
-            else {
-                ctx.cpu.keyboard[i] = false;
+            println!("I:{:#x}", ctx.cpu.register_i);
+
+            for (i, code) in KEYBOARD_MAP.iter().enumerate() {
+                if event_pump.keyboard_state().is_scancode_pressed(*code) {
+                    ctx.cpu.keyboard[i] = true;
+                    println!("Key: {i} pressed");
+                }
+                else {
+                    ctx.cpu.keyboard[i] = false;
+                }
             }
         }
 

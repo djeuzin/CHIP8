@@ -40,75 +40,6 @@ impl Cpu {
     }
 }
 
-fn logical_and_arithmetic_instructions(ctx: &mut CH8Context, n2: u8, n3: u8, n4: u8, super_chip: bool) {
-    let x = usize::from(n2);
-    let y = usize::from(n3);
-    
-    match n4 {
-        0x0 => {
-            ctx.cpu.registers[x] = ctx.cpu.registers[y];
-        },
-        0x1 => {
-            ctx.cpu.registers[x] |= ctx.cpu.registers[y];
-        },
-        0x2 => {
-            ctx.cpu.registers[x] &= ctx.cpu.registers[y];
-        },
-        0x3 => {
-            ctx.cpu.registers[x] ^= ctx.cpu.registers[y];
-        },
-        0x4 => {
-            let (count, overflow) = ctx.cpu.registers[x].overflowing_add(ctx.cpu.registers[y]);
-            ctx.cpu.registers[x] = count;
-
-            if overflow {
-                ctx.cpu.registers[0xF] = 1;
-            }
-        },
-        0x5 => {
-            ctx.cpu.registers[x] -= ctx.cpu.registers[y];
-
-            if ctx.cpu.registers[x] >= ctx.cpu.registers[y] {
-                ctx.cpu.registers[0xF] = 1;
-            } 
-            else {
-                ctx.cpu.registers[0xF] = 0;
-            }
-        },
-        0x6 => {
-            if !super_chip {
-                ctx.cpu.registers[x] = ctx.cpu.registers[y];
-            }
-
-            ctx.cpu.registers[0xF] = ctx.cpu.registers[x] % 2;
-
-            ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
-        },
-        0x7 => {
-            ctx.cpu.registers[y] -= ctx.cpu.registers[x];
-
-            if ctx.cpu.registers[y] >= ctx.cpu.registers[x] {
-                ctx.cpu.registers[0xF] = 1;
-            } 
-            else {
-                ctx.cpu.registers[0xF] = 0;
-            }
-        },
-        0xE => {
-            if !super_chip {
-                ctx.cpu.registers[x] = ctx.cpu.registers[y];
-            }
-
-            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] << 7) % 2;
-
-            ctx.cpu.registers[x] = ctx.cpu.registers[x] << 1;
-        },
-        _ => {
-            println!("Invalid instruction.");
-        }
-    }
-}
-
 pub fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     let i = usize::from(*pc);
     if i + 1 >= MEMORY_SIZE {
@@ -122,7 +53,7 @@ pub fn fetch(ram: &[u8], pc: &mut u16) -> Option<Bytes> {
     Some(Bytes(b1, b2))
 }
 
-pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
+pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
     let Bytes(b1, b2) = ctx.bytes;
 
     let n1 = b1 >> 4;
@@ -130,73 +61,138 @@ pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
     let n3 = b2 >> 4;
     let n4 = get_second_nible(b2);
 
-    match n1 {
-        0x0 => {
-            if n2 == 0x0 && n3 == 0xE {
-                if n4 == 0x0 { 
-                    ctx.display = [[false; 64]; 32];
-                }
-                else {
-                    ctx.cpu.stack_index -= 1;
-                    ctx.cpu.pc = ctx.cpu.stack[ctx.cpu.stack_index];
-                }
-            }
-            else if n3 == 0x0 {
-                ctx.cpu.pc -= 2;
-            }
+    let x = n2 as usize;
+    let y = n3 as usize;
+
+    match (n1, n2, n3, n4) {
+        (0x0, 0x0, 0xE, 0x0) => {
+            ctx.display = [[false; 64]; 32];
         },
-        0x1 => {
-            ctx.cpu.pc = (u16::from(n1) << 8) | u16::from(b2);
+        (0x0, 0x0, 0xE, _) => {
+            ctx.cpu.stack_index -= 1;
+            ctx.cpu.pc = ctx.cpu.stack[ctx.cpu.stack_index];
         },
-        0x2 => {
+        (0x0, 0x0, 0x0, 0x0) => {
+            ctx.cpu.pc -= 2;
+        },
+        (0x1, _, _, _) => {
+            let u16_n1 = n1 as u16;
+            let u16_b2 = b2 as u16;
+
+            ctx.cpu.pc = (u16_n1 << 8) | u16_b2;
+        },
+        (0x2, _, _, _) => {
             ctx.cpu.stack[ctx.cpu.stack_index] = ctx.cpu.pc;
             ctx.cpu.stack_index += 1;
-            ctx.cpu.pc = (u16::from(n1) << 8) | u16::from(b2);
+            
+            let u16_n1 = n1 as u16;
+            let u16_b2 = b2 as u16;
+
+            ctx.cpu.pc = (u16_n1 << 8) | u16_b2;
         },
-        0x3 => {
-            if ctx.cpu.registers[usize::from(n2)] == b2 {
+        (0x3, _, _, _) => {
+            if ctx.cpu.registers[x] == b2 {
                 ctx.cpu.pc += 2;
             }
         },
-        0x4 => {
-            if ctx.cpu.registers[usize::from(n2)] != b2 {
+        (0x4, _, _, _) => {
+            if ctx.cpu.registers[x] != b2 {
                 ctx.cpu.pc += 2;
             }            
         },
-        0x5 => {
-            if ctx.cpu.registers[usize::from(n2)] == ctx.cpu.registers[usize::from(n3)] {
+        (0x5, _, _, _) => {
+            if ctx.cpu.registers[x] == ctx.cpu.registers[y] {
                 ctx.cpu.pc += 2;
             }
         },
-        0x6 => {
-            let x = usize::from(n2);
+        (0x6, _, _, _) => {
             ctx.cpu.registers[x] = b2;
         },
-        0x7 => {
-            let x = usize::from(n2);
+        (0x7, _, _, _) => {
             ctx.cpu.registers[x] += b2;
         },
-        0x8 => {
-            logical_and_arithmetic_instructions(&mut ctx, n2, n3, n4, false);
+        (0x8, _, _, 0x0) => {
+            ctx.cpu.registers[x] = ctx.cpu.registers[y];
         },
-        0x9 => {
-            if ctx.cpu.registers[usize::from(n2)] != ctx.cpu.registers[usize::from(n3)] {
+        (0x8, _, _, 0x1) => {
+            ctx.cpu.registers[x] |= ctx.cpu.registers[y];
+        },
+        (0x8, _, _, 0x2) => {
+            ctx.cpu.registers[x] &= ctx.cpu.registers[y];
+        },
+        (0x8, _, _, 0x3) => {
+            ctx.cpu.registers[x] ^= ctx.cpu.registers[y];
+        },
+        (0x8, _, _, 0x4) => {
+            let (count, overflow) = ctx.cpu.registers[x].overflowing_add(ctx.cpu.registers[y]);
+            ctx.cpu.registers[x] = count;
+
+            if overflow {
+                ctx.cpu.registers[0xF] = 1;
+            }
+        },
+        (0x8, _, _, 0x5) => {
+            ctx.cpu.registers[x] -= ctx.cpu.registers[y];
+
+            if ctx.cpu.registers[x] >= ctx.cpu.registers[y] {
+                ctx.cpu.registers[0xF] = 1;
+            } 
+            else {
+                ctx.cpu.registers[0xF] = 0;
+            }
+        },
+        (0x8, _, _, 0x6) => {
+            if !super_chip {
+                ctx.cpu.registers[x] = ctx.cpu.registers[y];
+            }
+
+            ctx.cpu.registers[0xF] = ctx.cpu.registers[x] % 2;
+
+            ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
+        },
+        (0x8, _, _, 0x7) => {
+            ctx.cpu.registers[y] -= ctx.cpu.registers[x];
+
+            if ctx.cpu.registers[y] >= ctx.cpu.registers[x] {
+                ctx.cpu.registers[0xF] = 1;
+            } 
+            else {
+                ctx.cpu.registers[0xF] = 0;
+            }
+        },
+        (0x8, _, _, 0xE) => {
+            if !super_chip {
+                ctx.cpu.registers[x] = ctx.cpu.registers[y];
+            }
+
+            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] << 7) % 2;
+
+            ctx.cpu.registers[x] = ctx.cpu.registers[x] << 1;
+        },
+        (0x9, _, _, _) => {
+            if ctx.cpu.registers[x] != ctx.cpu.registers[y] {
                 ctx.cpu.pc += 2;
             }
         },
-        0xA => {
-            ctx.cpu.register_i = (u16::from(n2) << 8) | u16::from(b2);
+        (0xA, _, _, _) => {
+            let x = x as u16;
+            let b2 = b2 as u16;
+
+            ctx.cpu.register_i = (x << 8) | b2;
         },
-        0xB => {
-            ctx.cpu.pc = (u16::from(n2) << 8) | u16::from(b2) + u16::from(ctx.cpu.registers[0x0]);
+        (0xB, _, _, _) => {
+            let x = x as u16;
+            let b2 = b2 as u16;
+
+            ctx.cpu.pc = (x << 8) | b2 + (ctx.cpu.registers[0x0] as u16);
         },
-        0xC => {
+        (0xC, _, _, _) => {
             let mut rng = rand::thread_rng();
             let n: u8 = rng.gen_range(0..b2);
 
-            ctx.cpu.registers[usize::from(n2)] = n & b2;
+            ctx.cpu.registers[x] = n & b2;
         },
-        0xD => {
+        (0xD, _, _, _) => {
             // DXYN draw
             let mut y = usize::from(ctx.cpu.registers[usize::from(n3)] % 32);
             
@@ -228,10 +224,10 @@ pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
                 y = y + 1;
             }
         },
-        0xE => {
-            let x = n2 as usize;
+        (0xE, _, _, _) => {
             let index = ctx.cpu.registers[x] as usize;
-            if n3 == 0x9{
+
+            if n3 == 0x9 {
                 if ctx.cpu.keyboard[index] {
                     ctx.cpu.pc += 2;
                 }
@@ -242,8 +238,8 @@ pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
                 }
             }
         },
-        other => {
-            println!("Invalid instruction {other}. Exiting");
+        _ => {
+            println!("Invalid instruction {n1:#x}-{n2:#x}-{n3:#x}-{n4:#x}. Exiting");
             return false;
         }
     }
@@ -300,7 +296,7 @@ pub fn run(mut ctx: &mut CH8Context, ips: u64) {
             }
         };
 
-        let success = decode_execute(&mut ctx);
+        let success = decode_execute(&mut ctx, false);
 
         if !success { break; }
 

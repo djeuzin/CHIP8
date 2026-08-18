@@ -238,6 +238,62 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 }
             }
         },
+        (0xF, _, 0x0, 0x7) => {
+            ctx.cpu.registers[x] = ctx.cpu.delay_timer;
+        },
+        (0xF, _, 0x1, 0x5) => {
+            ctx.cpu.delay_timer = ctx.cpu.registers[x];
+        },
+        (0xF, _, 0x1, 0x8) => {
+            ctx.cpu.sound_timer = ctx.cpu.registers[x];
+        },
+        (0xF, _, 0x1, 0xE) => {
+            ctx.cpu.register_i += ctx.cpu.registers[x] as u16;
+
+            if ctx.cpu.register_i > 0xFFF { 
+                ctx.cpu.register_i = 1; 
+            }
+        },
+        (0xF, _, 0x0, 0xA) => {
+            ctx.cpu.pc -= 2;
+
+            for (i, key) in ctx.cpu.keyboard.iter().enumerate() {
+                if *key {
+                    ctx.cpu.registers[x] = i as u8;
+                    ctx.cpu.pc += 2;
+                    break;
+                }
+            }
+        },
+        (0xF, _, 0x2, 0x9) => {
+            ctx.cpu.register_i = 0x50 + 5 * (ctx.cpu.registers[x] as u16);
+        },
+        (0xF, _, 0x3, 0x3) => {
+            let byte = ctx.cpu.registers[x];
+            let c: u8 = byte % 10;
+            let b: u8 = ((byte - c) / 10) % 10;
+            let a: u8 = ((byte - c + b * 10) / 100) % 10;
+
+            let addr = ctx.cpu.register_i as usize;
+
+            ctx.ram[addr] = a;
+            ctx.ram[addr + 1] = b;
+            ctx.ram[addr + 2] = c;
+        },
+        (0xF, _, 0x5, 0x5) => {
+            let addr = ctx.cpu.register_i as usize;
+
+            for i in 0..(x+1) {
+                ctx.ram[addr + i] = ctx.cpu.registers[i];
+            }
+        },
+        (0xF, _, 0x6, 0x5) => {
+            let addr = ctx.cpu.register_i as usize;
+
+            for i in 0..(x+1) {
+                ctx.cpu.registers[i] = ctx.ram[addr + i];
+            }
+        },
         _ => {
             println!("Invalid instruction {n1:#x}-{n2:#x}-{n3:#x}-{n4:#x}. Exiting");
             return false;

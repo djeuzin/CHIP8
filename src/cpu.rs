@@ -21,7 +21,8 @@ pub struct Cpu {
     stack_index: usize,
     delay_timer: u8,
     sound_timer: u8,
-    registers: [u8; 16]
+    registers: [u8; 16],
+    keyboard: [bool; 16]
 }
 
 impl Cpu {
@@ -33,7 +34,8 @@ impl Cpu {
             stack_index: 0,
             delay_timer: 255,
             sound_timer: 255,
-            registers: [0; 16]
+            registers: [0; 16],
+            keyboard: [false; 16]
         }
     }
 }
@@ -226,6 +228,20 @@ pub fn decode_execute(mut ctx: &mut CH8Context) -> bool {
                 y = y + 1;
             }
         },
+        0xE => {
+            let x = n2 as usize;
+            let index = ctx.cpu.registers[x] as usize;
+            if n3 == 0x9{
+                if ctx.cpu.keyboard[index] {
+                    ctx.cpu.pc += 2;
+                }
+            }
+            else {
+                if !ctx.cpu.keyboard[index] {
+                    ctx.cpu.pc += 2;
+                }
+            }
+        },
         other => {
             println!("Invalid instruction {other}. Exiting");
             return false;
@@ -263,6 +279,16 @@ pub fn run(mut ctx: &mut CH8Context, ips: u64) {
                     break 'running
                 },
                 _ => {}
+            }
+        }
+
+        for (i, code) in KEYBOARD_MAP.iter().enumerate() {
+            if event_pump.keyboard_state().is_scancode_pressed(*code) {
+                ctx.cpu.keyboard[i] = true;
+                println!("Key: {i} pressed");
+            }
+            else {
+                ctx.cpu.keyboard[i] = false;
             }
         }
 

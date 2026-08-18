@@ -1,3 +1,5 @@
+use sdl2::keyboard::Scancode;
+
 pub const MEMORY_SIZE: usize = 4 * 1024;
 
 pub const NIBBLE_MASK: u8 = 0b0000_1111;
@@ -26,3 +28,10 @@ pub const FONTS: [u8; 80] = [
 
 pub const SCREEN_WIDTH: u32 = 640;
 pub const SCREEN_HEIGHT: u32 = 320;
+
+pub const KEYBOARD_MAP: [Scancode; 16] = [
+    Scancode::X,    Scancode::Num1, Scancode::Num2, Scancode::Num3,
+    Scancode::Q,    Scancode::W,    Scancode::E,    Scancode::A,
+    Scancode::S,    Scancode::D,    Scancode::Z,    Scancode::C,
+    Scancode::Num4, Scancode::R,    Scancode::F,    Scancode::V   
+];

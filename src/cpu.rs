@@ -187,7 +187,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
         },
         (0xC, _, _, _) => {
             let mut rng = rand::thread_rng();
-            let n: u8 = rng.gen_range(0..b2);
+            let n: u8 = rng.gen_range(0..255);
 
             ctx.cpu.registers[x] = n & b2;
         },

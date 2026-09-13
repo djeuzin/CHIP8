@@ -320,7 +320,7 @@ fn setup_screen() -> (sdl2::render::WindowCanvas, sdl2::EventPump) {
     (canvas, event_pump)
 }
 
-fn handle_event(event_pump: &mut sdl2::EventPump) -> bool {
+fn handle_event(ctx: &mut CH8Context, event_pump: &mut sdl2::EventPump) -> bool {
     for event in event_pump.poll_iter() {
         match event {
             Event::Quit {..} |
@@ -328,6 +328,15 @@ fn handle_event(event_pump: &mut sdl2::EventPump) -> bool {
                 return false;
             },
             _ => { }
+        }
+    }
+
+    for (i, code) in KEYBOARD_MAP.iter().enumerate() {
+        if event_pump.keyboard_state().is_scancode_pressed(*code) {
+            ctx.cpu.keyboard[i] = true;
+        }
+        else {
+            ctx.cpu.keyboard[i] = false;
         }
     }
 
@@ -360,7 +369,7 @@ pub fn run(mut ctx: &mut CH8Context, ips: u64, _debug: bool) {
     let (mut canvas, mut event_pump) = setup_screen();
 
     loop {
-        if !handle_event(&mut event_pump) { break };    
+        if !handle_event(&mut ctx, &mut event_pump) { break };    
 
         ctx.bytes = fetch(&ctx.ram, &mut ctx.cpu.pc).unwrap();
 

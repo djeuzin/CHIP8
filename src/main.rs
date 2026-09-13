@@ -19,6 +19,9 @@ struct Args {
     // Instructions per second
     #[arg(short, long, default_value_t = 60)]
     ips: u64,
+
+    #[arg(short, long, default_value_t = true)]
+    debug: bool,
 }
 
 pub fn main() {
@@ -31,5 +34,5 @@ pub fn main() {
 
     let mut ctx = CH8Context::init(&args.path);
 
-    run(&mut ctx, args.ips);
+    run(&mut ctx, args.ips, args.debug);
 }

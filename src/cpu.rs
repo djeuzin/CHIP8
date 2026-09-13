@@ -130,16 +130,15 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             if overflow {
                 ctx.cpu.registers[0xF] = 1;
             }
-        },
-        (0x8, _, _, 0x5) => {
-            if ctx.cpu.registers[x] >= ctx.cpu.registers[y] {
-                ctx.cpu.registers[0xF] = 1;
-            } 
             else {
                 ctx.cpu.registers[0xF] = 0;
             }
+        },
+        (0x8, _, _, 0x5) => {
+            let (result, borrow) = ctx.cpu.registers[x].overflowing_sub(ctx.cpu.registers[y]);
 
-            ctx.cpu.registers[x] = ctx.cpu.registers[x].wrapping_sub(ctx.cpu.registers[y]);
+            ctx.cpu.registers[x] = result;
+            ctx.cpu.registers[0xF] = if borrow { 0 } else { 1 };
         },
         (0x8, _, _, 0x6) => {
             if super_chip {
@@ -151,14 +150,10 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
         },
         (0x8, _, _, 0x7) => {
-            if ctx.cpu.registers[y] >= ctx.cpu.registers[x] {
-                ctx.cpu.registers[0xF] = 1;
-            } 
-            else {
-                ctx.cpu.registers[0xF] = 0;
-            }
+            let (result, borrow) = ctx.cpu.registers[y].overflowing_sub(ctx.cpu.registers[x]);
 
-            ctx.cpu.registers[x] = ctx.cpu.registers[y].wrapping_sub(ctx.cpu.registers[x]);
+            ctx.cpu.registers[x] = result;
+            ctx.cpu.registers[0xF] = if borrow { 0 } else { 1 };
         },
         (0x8, _, _, 0xE) => {
             if super_chip {

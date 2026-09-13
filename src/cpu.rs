@@ -145,9 +145,10 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 ctx.cpu.registers[x] = ctx.cpu.registers[y];
             }
 
-            ctx.cpu.registers[0xF] = ctx.cpu.registers[x] % 2;
+            let bit = ctx.cpu.registers[x] % 2;
 
             ctx.cpu.registers[x] = ctx.cpu.registers[x] >> 1;
+            ctx.cpu.registers[0xF] = bit;
         },
         (0x8, _, _, 0x7) => {
             let (result, borrow) = ctx.cpu.registers[y].overflowing_sub(ctx.cpu.registers[x]);
@@ -160,8 +161,9 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 ctx.cpu.registers[x] = ctx.cpu.registers[y];
             }
 
-            ctx.cpu.registers[0xF] = (ctx.cpu.registers[x] >> 7) & 1;
+            let bit = (ctx.cpu.registers[x] >> 7) % 2;
             ctx.cpu.registers[x] = ctx.cpu.registers[x] << 1;
+            ctx.cpu.registers[0xF] = bit;
         },
         (0x9, _, _, 0x0) => {
             if ctx.cpu.registers[x] != ctx.cpu.registers[y] {

@@ -68,7 +68,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
         (0x0, 0x0, 0xE, 0x0) => {
             ctx.display = [[false; 64]; 32];
         },
-        (0x0, 0x0, 0xE, _) => {
+        (0x0, 0x0, 0xE, 0xE) => {
             ctx.cpu.stack_index -= 1;
             ctx.cpu.pc = ctx.cpu.stack[ctx.cpu.stack_index];
         },
@@ -302,76 +302,46 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
     return true;
 }
 
-pub fn run(mut ctx: &mut CH8Context, ips: u64) {
-    let interval: Duration = Duration::from_millis(1000 / ips);
-    let mut next_time = Instant::now() + interval;
-
+fn setup_screen() -> (sdl2::Sdl, sdl2::render::WindowCanvas, sdl2::EventPump) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-
     let window = video_subsystem.window("rust-sdl2 demo", SCREEN_WIDTH, SCREEN_HEIGHT)
         .position_centered()
         .build()
         .unwrap();
-
     let mut canvas = window.into_canvas().build().unwrap();
-    let mut rect = Rect::new(0, 0, RECT_WIDTH, RECT_HEIGHT);
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
-    let mut event_pump = sdl_context.event_pump().unwrap();
 
-    let mut debug: bool;
+    let event_pump = sdl_context.event_pump().unwrap();
 
-    println!("Current instructions: {:#x}-{:#x}", ctx.ram[usize::from(ctx.cpu.pc)], ctx.ram[usize::from(ctx.cpu.pc) + 1]);
-    for i in 0..16 {
-        print!("V{i}={:#x}, ", ctx.cpu.registers[i]);
-    }
-    println!("I:{:#x}", ctx.cpu.register_i);
+    (sdl_context, canvas, event_pump)
+}
+
+pub fn run(mut ctx: &mut CH8Context, ips: u64, debug: bool) {
+    let interval: Duration = Duration::from_millis(1000 / ips);
+    let mut next_time = Instant::now() + interval;
+
+    let (sdl_context, mut canvas, mut event_pump) = setup_screen();
+
+    let mut rect = Rect::new(0, 0, RECT_WIDTH, RECT_HEIGHT);
 
     'running: loop {
-        debug = false;
-
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
                 Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running
                 },
-                Event::KeyDown { keycode: Some(Keycode::RETURN), .. } => {
-                    debug = false;
-                }
                 _ => {}
-            }
-        }
-
-        if debug { continue; }
-
-        if false {
-            println!("Current instructions: PC={:#x}; {:#x}-{:#x}", ctx.cpu.pc, ctx.ram[usize::from(ctx.cpu.pc)], ctx.ram[usize::from(ctx.cpu.pc) + 1]);
-            for i in 0..16 {
-                print!("V{i}={:#x}, ", ctx.cpu.registers[i]);
-            }
-            println!("I:{:#x}", ctx.cpu.register_i);
-
-            for (i, code) in KEYBOARD_MAP.iter().enumerate() {
-                if event_pump.keyboard_state().is_scancode_pressed(*code) {
-                    ctx.cpu.keyboard[i] = true;
-                    println!("Key: {i} pressed");
-                }
-                else {
-                    ctx.cpu.keyboard[i] = false;
-                }
             }
         }
 
         ctx.bytes = match fetch(&ctx.ram, &mut ctx.cpu.pc) {
             Some(bytes) => bytes,
-            None => {
-                println!("Coundn't fech bytes. Exiting.");
-                break;
-            }
+            None => panic!("Couldn't fetch bytes from memory."),
         };
 
         let success = decode_execute(&mut ctx, false);
@@ -400,6 +370,5 @@ pub fn run(mut ctx: &mut CH8Context, ips: u64) {
         next_time += interval;
 
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
 }

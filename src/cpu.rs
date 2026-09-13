@@ -158,7 +158,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
                 ctx.cpu.registers[0xF] = 0;
             }
 
-            ctx.cpu.registers[y] = ctx.cpu.registers[y].wrapping_sub(ctx.cpu.registers[x]);
+            ctx.cpu.registers[x] = ctx.cpu.registers[y].wrapping_sub(ctx.cpu.registers[x]);
         },
         (0x8, _, _, 0xE) => {
             if super_chip {
@@ -271,7 +271,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
             let byte = ctx.cpu.registers[x];
             let c: u8 = byte % 10;
             let b: u8 = ((byte - c) / 10) % 10;
-            let a: u8 = ((byte - c + b * 10) / 100) % 10;
+            let a: u8 = ((byte - c - b * 10) / 100) % 10;
 
             let addr = ctx.cpu.register_i as usize;
 

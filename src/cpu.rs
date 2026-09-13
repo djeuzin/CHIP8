@@ -302,7 +302,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
     return true;
 }
 
-fn setup_screen() -> (sdl2::Sdl, sdl2::render::WindowCanvas, sdl2::EventPump) {
+fn setup_screen() -> (sdl2::render::WindowCanvas, sdl2::EventPump) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("rust-sdl2 demo", SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -317,54 +317,59 @@ fn setup_screen() -> (sdl2::Sdl, sdl2::render::WindowCanvas, sdl2::EventPump) {
 
     let event_pump = sdl_context.event_pump().unwrap();
 
-    (sdl_context, canvas, event_pump)
+    (canvas, event_pump)
 }
 
-pub fn run(mut ctx: &mut CH8Context, ips: u64, debug: bool) {
+fn handle_event(event_pump: &mut sdl2::EventPump) -> bool {
+    for event in event_pump.poll_iter() {
+        match event {
+            Event::Quit {..} |
+            Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
+                return false;
+            },
+            _ => { }
+        }
+    }
+
+    true
+}
+
+fn draw(ctx: &mut CH8Context, canvas: &mut sdl2::render::WindowCanvas) {
+    let mut rect = Rect::new(0, 0, RECT_WIDTH, RECT_HEIGHT);
+
+    canvas.set_draw_color(Color::RGB(0,0,0));
+    canvas.clear();
+    canvas.set_draw_color(Color::RGB(255,255,255));
+    for i in 0..32 {
+        for j in 0..64 {
+            let x: i32 = j as i32;
+            let y: i32 = i as i32;
+
+            if ctx.display[i][j] {
+                set_rect_coords(&mut rect, x, y);
+                let _ = canvas.fill_rect(rect);
+            }
+        }
+    }
+}
+
+pub fn run(mut ctx: &mut CH8Context, ips: u64, _debug: bool) {
     let interval: Duration = Duration::from_millis(1000 / ips);
     let mut next_time = Instant::now() + interval;
 
-    let (sdl_context, mut canvas, mut event_pump) = setup_screen();
+    let (mut canvas, mut event_pump) = setup_screen();
 
-    let mut rect = Rect::new(0, 0, RECT_WIDTH, RECT_HEIGHT);
+    loop {
+        if !handle_event(&mut event_pump) { break };    
 
-    'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
-                    break 'running
-                },
-                _ => {}
-            }
-        }
+        ctx.bytes = fetch(&ctx.ram, &mut ctx.cpu.pc).unwrap();
 
-        ctx.bytes = match fetch(&ctx.ram, &mut ctx.cpu.pc) {
-            Some(bytes) => bytes,
-            None => panic!("Couldn't fetch bytes from memory."),
-        };
-
-        let success = decode_execute(&mut ctx, false);
-
-        if !success { break; }
+        if !decode_execute(&mut ctx, false) { break; }
 
         ctx.cpu.sound_timer = ctx.cpu.sound_timer.wrapping_sub(1);
         ctx.cpu.delay_timer = ctx.cpu.delay_timer.wrapping_sub(1);
 
-        canvas.set_draw_color(Color::RGB(0,0,0));
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(255,255,255));
-        for i in 0..32 {
-            for j in 0..64 {
-                let x: i32 = j as i32;
-                let y: i32 = i as i32;
-
-                if ctx.display[i][j] {
-                    set_rect_coords(&mut rect, x, y);
-                    let _ = canvas.fill_rect(rect);
-                }
-            }
-        }
+        draw(&mut ctx, &mut canvas);
 
         sleep(next_time - Instant::now());
         next_time += interval;

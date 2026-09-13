@@ -29,6 +29,7 @@ pub const FONTS: [u8; 80] = [
 pub const SCREEN_WIDTH: u32 = 640;
 pub const SCREEN_HEIGHT: u32 = 320;
 
+#[warn(unused_variables)]
 pub const KEYBOARD_MAP: [Scancode; 16] = [
     Scancode::X,    Scancode::Num1, Scancode::Num2, Scancode::Num3,
     Scancode::Q,    Scancode::W,    Scancode::E,    Scancode::A,

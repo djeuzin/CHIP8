@@ -302,7 +302,7 @@ pub fn decode_execute(ctx: &mut CH8Context, super_chip: bool) -> bool {
 fn setup_screen() -> (sdl2::render::WindowCanvas, sdl2::EventPump) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem.window("rust-sdl2 demo", SCREEN_WIDTH, SCREEN_HEIGHT)
+    let window = video_subsystem.window("CHIP8 Emulator", SCREEN_WIDTH, SCREEN_HEIGHT)
         .position_centered()
         .build()
         .unwrap();
